@@ -60,8 +60,8 @@ const int MAX_DEPTH = 20;
 const int MAX_STACK_SIZE = MAX_DEPTH * 2 ;
 const vec3 BACKGROUND_COLOR = vec3(0.2, 0.7, 0.8);
 const float MIN_EPSILON = 0.001;
-const int WIDTH = 1920;
-const int HEIGHT = 1080;
+const int WIDTH = 1024;
+const int HEIGHT = 768;
 const float GAMMA = 2.2;
 
 vec3 custom_refract(vec3 I, vec3 N, float eta_out, float eta_in) {
@@ -87,7 +87,7 @@ bool ray_triangle_intersect(vec3 orig, vec3 dir, Triangle tri, out float t, out 
     vec3 edge2 = v2 - v0;
     vec3 h = cross(dir, edge2);
     float a = dot(edge1, h);
-    if (abs(a) < 1e-6) return false;
+    if (abs(a) < 1e-5) return false;
     
     float f = 1.0 / a;
     vec3 s = orig - v0;
@@ -102,6 +102,9 @@ bool ray_triangle_intersect(vec3 orig, vec3 dir, Triangle tri, out float t, out 
     if (tTemp > MIN_EPSILON) {
         t = tTemp;
         normal = normalize(cross(edge1, edge2));
+        if (dot(dir, normal) > 0.0) {
+            normal = -normal;
+        }
         return true;
     }
     return false;
@@ -166,18 +169,17 @@ void scene_intersect(vec3 orig, vec3 dir, out SceneHit nearest) {
     }
 
     for (int i = 0; i < triangles.length(); i++) {
-    float t = 1e10;
-    vec3 triNormal;
-    if (ray_triangle_intersect(orig, dir, triangles[i], t, triNormal) && t < nearest.distance) {
-        vec3 p = orig + dir * t;
-        nearest.hit = true;
-        nearest.distance = t;
-        nearest.point = p;
-        nearest.normal = triNormal;
-        nearest.material = triangles[i].material;
+        float t = 1e10;
+        vec3 triNormal;
+        if (ray_triangle_intersect(orig, dir, triangles[i], t, triNormal) && t < nearest.distance) {
+            vec3 p = orig + dir * t;
+            nearest.hit = true;
+            nearest.distance = t;
+            nearest.point = p;
+            nearest.normal = triNormal;
+            nearest.material = triangles[i].material;
+        }
     }
-}
-
 }
 
 bool shadow_intersect(vec3 orig, vec3 dir, float max_dist) {

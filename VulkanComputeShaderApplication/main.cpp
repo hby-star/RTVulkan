@@ -29,8 +29,8 @@
 
 using Clock = std::chrono::high_resolution_clock;
 
-const uint32_t WIDTH = 1920;
-const uint32_t HEIGHT = 1080;
+const uint32_t WIDTH = 1024;
+const uint32_t HEIGHT = 768;
 const uint32_t GROUP = 256;
 const uint32_t LOCAL_SIZE_X = 16;
 const uint32_t LOCAL_SIZE_Y = 16;
