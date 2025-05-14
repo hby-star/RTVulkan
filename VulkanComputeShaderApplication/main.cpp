@@ -27,6 +27,8 @@
 #include <random>
 #include <cmath>
 
+const bool preferHighPerformanceGPU = true;
+
 using Clock = std::chrono::high_resolution_clock;
 
 const uint32_t WIDTH = 1024;
@@ -560,22 +562,41 @@ private:
 		std::vector<VkPhysicalDevice> devices(deviceCount);
 		vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
+		std::multimap<int, VkPhysicalDevice> rankedDevices;
+
 		for (const auto& device : devices)
 		{
 			if (isDeviceSuitable(device))
 			{
-				physicalDevice = device;
-				VkPhysicalDeviceProperties deviceProperties;
-				vkGetPhysicalDeviceProperties(device, &deviceProperties);
-				std::cout << "GPU Name: " << deviceProperties.deviceName << std::endl;
-				break;
+				VkPhysicalDeviceProperties properties;
+				vkGetPhysicalDeviceProperties(device, &properties);
+				int score = 0;
+
+				if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+					score += 1000;
+				else if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+					score += 100;
+				rankedDevices.insert(std::make_pair(score, device));
 			}
 		}
 
-		if (physicalDevice == VK_NULL_HANDLE)
+		if (rankedDevices.empty())
 		{
 			throw std::runtime_error("failed to find a suitable GPU!");
 		}
+
+		if (preferHighPerformanceGPU)
+		{
+			physicalDevice = rankedDevices.rbegin()->second;
+		}
+		else
+		{
+			physicalDevice = rankedDevices.begin()->second;
+		}
+
+		VkPhysicalDeviceProperties deviceProperties;
+		vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+		std::cout << "Selected GPU: " << deviceProperties.deviceName << std::endl;
 	}
 
 	void createLogicalDevice()
