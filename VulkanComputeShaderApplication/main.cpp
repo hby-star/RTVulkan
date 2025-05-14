@@ -5,6 +5,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "lib/stb_image.h"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "lib/tiny_obj_loader.h"
+
 #include <iostream>
 #include <fstream>
 #include <stdexcept>
@@ -20,8 +26,6 @@
 #include <set>
 #include <random>
 #include <cmath>
-#define STB_IMAGE_IMPLEMENTATION
-#include "lib/stb_image.h"
 
 using Clock = std::chrono::high_resolution_clock;
 
@@ -33,6 +37,7 @@ const uint32_t LOCAL_SIZE_Y = 16;
 
 
 const uint32_t RAY_COUNT = WIDTH * HEIGHT;
+uint32_t TRIANGLE_COUNT = 0;
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -101,6 +106,14 @@ struct Material
 struct Sphere
 {
 	glm::vec4 center_radius;
+	Material material;
+};
+
+struct Triangle
+{
+	glm::vec4 v0;
+	glm::vec4 v1;
+	glm::vec4 v2;
 	Material material;
 };
 
@@ -221,8 +234,12 @@ private:
 
 	VkCommandPool commandPool;
 
-	std::vector<VkBuffer> shaderStorageBuffers;
-	std::vector<VkDeviceMemory> shaderStorageBuffersMemory;
+	std::vector<VkBuffer> shaderStorageRayBuffers;
+	std::vector<VkDeviceMemory> shaderStorageRayBuffersMemory;
+
+	std::vector<VkBuffer> shaderStorageTriangleBuffers;
+	std::vector<VkDeviceMemory> shaderStorageTriangleBuffersMemory;
+
 
 	std::vector<VkBuffer> uniformBuffers;
 	std::vector<VkDeviceMemory> uniformBuffersMemory;
@@ -398,8 +415,11 @@ private:
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
-			vkDestroyBuffer(device, shaderStorageBuffers[i], nullptr);
-			vkFreeMemory(device, shaderStorageBuffersMemory[i], nullptr);
+			vkDestroyBuffer(device, shaderStorageRayBuffers[i], nullptr);
+			vkFreeMemory(device, shaderStorageRayBuffersMemory[i], nullptr);
+
+			vkDestroyBuffer(device, shaderStorageTriangleBuffers[i], nullptr);
+			vkFreeMemory(device, shaderStorageTriangleBuffersMemory[i], nullptr);
 		}
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -812,7 +832,7 @@ private:
 
 		// ¼ÓÔØÍ¼Ïñ
 		int texWidth, texHeight, texChannels;
-		stbi_uc* pixels = stbi_load("background.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+		stbi_uc* pixels = stbi_load("assets/background.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		VkDeviceSize imageSize = texWidth * texHeight * 4;
 
 		if (!pixels)
@@ -1053,7 +1073,7 @@ private:
 
 	void createComputeDescriptorSetLayout()
 	{
-		std::array<VkDescriptorSetLayoutBinding, 5> layoutBindings{};
+		std::array<VkDescriptorSetLayoutBinding, 6> layoutBindings{};
 		layoutBindings[0].binding = 0;
 		layoutBindings[0].descriptorCount = 1;
 		layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1084,10 +1104,16 @@ private:
 		layoutBindings[4].pImmutableSamplers = nullptr;
 		layoutBindings[4].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+		layoutBindings[5].binding = 5;
+		layoutBindings[5].descriptorCount = 1;
+		layoutBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		layoutBindings[5].pImmutableSamplers = nullptr;
+		layoutBindings[5].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 5;
+		layoutInfo.bindingCount = 6;
 		layoutInfo.pBindings = layoutBindings.data();
 
 		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &computeDescriptorSetLayout) != VK_SUCCESS)
@@ -1292,9 +1318,7 @@ private:
 
 	void createShaderStorageBuffers()
 	{
-		std::default_random_engine rndEngine((unsigned)time(nullptr));
-		std::uniform_real_distribution<float> rndDist(0.0f, 1.0f);
-
+		// Ray buffer
 		int pix = 0;
 		float fov = 1.05f;
 		for (auto& ray : rays)
@@ -1308,31 +1332,50 @@ private:
 
 		}
 
-		VkDeviceSize bufferSize = sizeof(Ray) * WIDTH * HEIGHT;
+		VkDeviceSize rayBufferSize = sizeof(Ray) * WIDTH * HEIGHT;
 
 		// Create a staging buffer used to upload data to the gpu
-		VkBuffer stagingBuffer;
-		VkDeviceMemory stagingBufferMemory;
-		createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+		VkBuffer rayStagingBuffer;
+		VkDeviceMemory rayStagingBufferMemory;
+		createBuffer(rayBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, rayStagingBuffer, rayStagingBufferMemory);
 
 		void* data;
-		vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-		memcpy(data, rays.data(), (size_t)bufferSize);
-		vkUnmapMemory(device, stagingBufferMemory);
+		vkMapMemory(device, rayStagingBufferMemory, 0, rayBufferSize, 0, &data);
+		memcpy(data, rays.data(), (size_t)rayBufferSize);
+		vkUnmapMemory(device, rayStagingBufferMemory);
 
-		shaderStorageBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-		shaderStorageBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+		shaderStorageRayBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+		shaderStorageRayBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
 
 		// Copy initial particle data to all storage buffers
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
-			createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageBuffers[i], shaderStorageBuffersMemory[i]);
-			copyBuffer(stagingBuffer, shaderStorageBuffers[i], bufferSize);
+			createBuffer(rayBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageRayBuffers[i], shaderStorageRayBuffersMemory[i]);
+			copyBuffer(rayStagingBuffer, shaderStorageRayBuffers[i], rayBufferSize);
 		}
 
-		vkDestroyBuffer(device, stagingBuffer, nullptr);
-		vkFreeMemory(device, stagingBufferMemory, nullptr);
+		vkDestroyBuffer(device, rayStagingBuffer, nullptr);
+		vkFreeMemory(device, rayStagingBufferMemory, nullptr);
 
+		// Triangle buffer
+		std::vector<Triangle> triangles = loadObjAsTriangles("assets/duck.obj", glass);
+		TRIANGLE_COUNT = triangles.size();
+		VkDeviceSize triannglesBufferSize = triangles.size() * sizeof(Triangle);
+		VkBuffer triangleStagingBuffer;
+		VkDeviceMemory triangleStagingBufferMemory;
+		createBuffer(triannglesBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, triangleStagingBuffer, triangleStagingBufferMemory);
+		vkMapMemory(device, triangleStagingBufferMemory, 0, triannglesBufferSize, 0, &data);
+		memcpy(data, triangles.data(), (size_t)triannglesBufferSize);
+		vkUnmapMemory(device, triangleStagingBufferMemory);
+		shaderStorageTriangleBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+		shaderStorageTriangleBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		{
+			createBuffer(triannglesBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageTriangleBuffers[i], shaderStorageTriangleBuffersMemory[i]);
+			copyBuffer(triangleStagingBuffer, shaderStorageTriangleBuffers[i], triannglesBufferSize);
+		}
+		vkDestroyBuffer(device, triangleStagingBuffer, nullptr);
+		vkFreeMemory(device, triangleStagingBufferMemory, nullptr);
 	}
 
 	void createUniformBuffers()
@@ -1438,7 +1481,7 @@ private:
 			uniformBufferInfo.offset = 0;
 			uniformBufferInfo.range = sizeof(UniformBufferObject);
 
-			std::array<VkWriteDescriptorSet, 5> descriptorWrites{};
+			std::array<VkWriteDescriptorSet, 6> descriptorWrites{};
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			descriptorWrites[0].dstSet = computeDescriptorSets[i];
 			descriptorWrites[0].dstBinding = 0;
@@ -1448,7 +1491,7 @@ private:
 			descriptorWrites[0].pBufferInfo = &uniformBufferInfo;
 
 			VkDescriptorBufferInfo storageBufferInfoLastFrame{};
-			storageBufferInfoLastFrame.buffer = shaderStorageBuffers[(i - 1) % MAX_FRAMES_IN_FLIGHT];
+			storageBufferInfoLastFrame.buffer = shaderStorageRayBuffers[(i - 1) % MAX_FRAMES_IN_FLIGHT];
 			storageBufferInfoLastFrame.offset = 0;
 			storageBufferInfoLastFrame.range = sizeof(Ray) * RAY_COUNT;
 
@@ -1461,7 +1504,7 @@ private:
 			descriptorWrites[1].pBufferInfo = &storageBufferInfoLastFrame;
 
 			VkDescriptorBufferInfo storageBufferInfoCurrentFrame{};
-			storageBufferInfoCurrentFrame.buffer = shaderStorageBuffers[i];
+			storageBufferInfoCurrentFrame.buffer = shaderStorageRayBuffers[i];
 			storageBufferInfoCurrentFrame.offset = 0;
 			storageBufferInfoCurrentFrame.range = sizeof(Ray) * RAY_COUNT;
 
@@ -1497,7 +1540,19 @@ private:
 			descriptorWrites[4].descriptorCount = 1;
 			descriptorWrites[4].pImageInfo = &backgroundImageInfo;
 
-			vkUpdateDescriptorSets(device, 5, descriptorWrites.data(), 0, nullptr);
+			VkDescriptorBufferInfo triangleBufferInfo{};
+			triangleBufferInfo.buffer = shaderStorageTriangleBuffers[i];
+			triangleBufferInfo.offset = 0;
+			triangleBufferInfo.range = sizeof(Triangle) * TRIANGLE_COUNT;
+			descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrites[5].dstSet = computeDescriptorSets[i];
+			descriptorWrites[5].dstBinding = 5;
+			descriptorWrites[5].dstArrayElement = 0;
+			descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+			descriptorWrites[5].descriptorCount = 1;
+			descriptorWrites[5].pBufferInfo = &triangleBufferInfo;
+
+			vkUpdateDescriptorSets(device, 6, descriptorWrites.data(), 0, nullptr);
 		}
 	}
 
@@ -1720,7 +1775,7 @@ private:
 		vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 		VkDeviceSize offsets[] = { 0 };
-		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &shaderStorageBuffers[currentFrame], offsets);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &shaderStorageRayBuffers[currentFrame], offsets);
 
 
 
@@ -1942,6 +1997,50 @@ private:
 		}
 
 		return shaderModule;
+	}
+
+	std::vector<Triangle> loadObjAsTriangles(const std::string& filename, const Material& mat)
+	{
+		tinyobj::attrib_t attrib;
+		std::vector<tinyobj::shape_t> shapes;
+		std::vector<tinyobj::material_t> materials;
+		std::string warn, err;
+
+		if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename.c_str()))
+		{
+			throw std::runtime_error("Failed to load OBJ: " + warn + err);
+		}
+
+		std::vector<Triangle> triangles;
+
+		for (const auto& shape : shapes)
+		{
+			size_t index_offset = 0;
+			for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++)
+			{
+				int fv = shape.mesh.num_face_vertices[f];
+				if (fv != 3) continue;
+
+				glm::vec3 v[3];
+				for (int i = 0; i < 3; i++)
+				{
+					tinyobj::index_t idx = shape.mesh.indices[index_offset + i];
+					float* vertex = &attrib.vertices[3 * idx.vertex_index];
+					v[i] = glm::vec3(vertex[0], vertex[1], vertex[2]);
+				}
+
+				Triangle tri;
+				tri.v0 = glm::vec4(v[0], 0.0f);
+				tri.v1 = glm::vec4(v[1], 0.0f);
+				tri.v2 = glm::vec4(v[2], 0.0f);
+				tri.material = mat;
+				triangles.push_back(tri);
+
+				index_offset += fv;
+			}
+		}
+
+		return triangles;
 	}
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats)
