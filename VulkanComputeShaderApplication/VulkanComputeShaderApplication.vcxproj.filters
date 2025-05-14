@@ -38,4 +38,9 @@
       <Filter>源文件</Filter>
     </Text>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="lib\stb_image.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>
