@@ -32,6 +32,8 @@ layout (binding = 0) uniform ParameterUBO {
     vec4 light1;
     vec4 light2;
     vec4 camPos;
+    vec4 bboxMin;
+    vec4 bboxMax;
 } ubo;
 
 layout(std140, binding = 1) readonly buffer RaySSBOIn {
@@ -63,6 +65,16 @@ const float MIN_EPSILON = 0.001;
 const int WIDTH = 1024;
 const int HEIGHT = 768;
 const float GAMMA = 2.2;
+
+bool ray_aabb_intersect(vec3 orig, vec3 dir, vec3 invDir, vec3 bboxMin, vec3 bboxMax) {
+    vec3 tmin = (bboxMin - orig) * invDir;
+    vec3 tmax = (bboxMax - orig) * invDir;
+    vec3 t1 = min(tmin, tmax);
+    vec3 t2 = max(tmin, tmax);
+    float tNear = max(max(t1.x, t1.y), t1.z);
+    float tFar = min(min(t2.x, t2.y), t2.z);
+    return tFar >= max(tNear, 0.0);
+}
 
 vec3 custom_refract(vec3 I, vec3 N, float eta_out, float eta_in) {
     bool isEntering = dot(I, N) < 0.0;
@@ -168,6 +180,11 @@ void scene_intersect(vec3 orig, vec3 dir, out SceneHit nearest) {
         }
     }
 
+
+    vec3 invDir = 1.0 / dir;
+    if (!ray_aabb_intersect(orig, dir, invDir, ubo.bboxMin.xyz, ubo.bboxMax.xyz)) {
+        return;
+    }
     for (int i = 0; i < triangles.length(); i++) {
         float t = 1e10;
         vec3 triNormal;
@@ -189,6 +206,11 @@ bool shadow_intersect(vec3 orig, vec3 dir, float max_dist) {
         if (ray_sphere_intersect(orig, dir, spheres[i], t) && t < max_dist) {
             return true;
         }
+    }
+
+    vec3 invDir = 1.0 / dir;
+    if (!ray_aabb_intersect(orig, dir, invDir, ubo.bboxMin.xyz, ubo.bboxMax.xyz)) {
+        return false;
     }
     for (int i = 0; i < triangles.length(); i++) {
         float t = 1e10;

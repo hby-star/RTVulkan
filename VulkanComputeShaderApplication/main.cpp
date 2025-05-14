@@ -117,6 +117,9 @@ struct Triangle
 	Material material;
 };
 
+glm::vec4 bboxMin(FLT_MAX);
+glm::vec4 bboxMax(-FLT_MAX);
+
 constexpr Material      ivory = { {0.9,  0.5, 0.1, 0.0}, {0.4, 0.4, 0.3, 50.0},  {1.0, 0.0, 0.0, 0.0} };
 constexpr Material      glass = { {0.0,  0.9, 0.1, 0.8}, {0.6, 0.7, 0.8, 125.0},  {1.5, 0.0, 0.0, 0.0} };
 constexpr Material red_rubber = { {1.4,  0.3, 0.0, 0.0}, {0.3, 0.1, 0.1, 10.0},  {1.0, 0.0, 0.0, 0.0} };
@@ -145,6 +148,8 @@ struct UniformBufferObject
 	glm::vec4 light1;
 	glm::vec4 light2;
 	glm::vec4 camPos;
+	glm::vec4 bboxMin;
+	glm::vec4 bboxMax;
 };
 
 struct Ray
@@ -1359,6 +1364,11 @@ private:
 
 		// Triangle buffer
 		std::vector<Triangle> triangles = loadObjAsTriangles("assets/duck.obj", glass);
+		for (const Triangle& tri : triangles)
+		{
+			bboxMin = glm::min(bboxMin, glm::min(tri.v0, glm::min(tri.v1, tri.v2)));
+			bboxMax = glm::max(bboxMax, glm::max(tri.v0, glm::max(tri.v1, tri.v2)));
+		}
 		TRIANGLE_COUNT = triangles.size();
 		VkDeviceSize triannglesBufferSize = triangles.size() * sizeof(Triangle);
 		VkBuffer triangleStagingBuffer;
@@ -1886,6 +1896,8 @@ private:
 		ubo.light1 = glm::vec4(lights[1], 1.0f);
 		ubo.light2 = glm::vec4(lights[2], 1.0f);
 		ubo.camPos = glm::vec4(cameraPos, 1.0f);
+		ubo.bboxMin = bboxMin;
+		ubo.bboxMax = bboxMax;
 
 		memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 	}
