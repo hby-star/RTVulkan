@@ -354,7 +354,7 @@ private:
 			// FPS counter
 			frameCount++;
 			if (lastTime - fpsTimer >= 1.0)
-			{ // 每1秒
+			{
 				std::cout << "FPS: " << frameCount << "  FrameTime: " << (1000.0 / frameCount) << " ms" << std::endl;
 				lastFrameCount = frameCount;
 				frameCount = 0;
@@ -728,7 +728,6 @@ private:
 		barrier.subresourceRange.baseArrayLayer = 0;
 		barrier.subresourceRange.layerCount = 1;
 
-		// 设置访问掩码
 		if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
 		{
 			barrier.srcAccessMask = 0;
@@ -818,28 +817,27 @@ private:
 		VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 		VkImageMemoryBarrier imageMemoryBarrier = {};
 		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		imageMemoryBarrier.srcAccessMask = 0; // 没有源访问
-		imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT; // 着色器读取和写入
-		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED; // 旧的布局，未定义
-		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL; // 新的布局，通用布局
-		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // 默认
-		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // 默认
-		imageMemoryBarrier.image = computeTargetImage; // 目标图像
-		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // 颜色通道
-		imageMemoryBarrier.subresourceRange.baseMipLevel = 0; // 从mipmap等级0开始
-		imageMemoryBarrier.subresourceRange.levelCount = 1; // 使用一级mipmap
-		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0; // 从第0层开始
-		imageMemoryBarrier.subresourceRange.layerCount = 1; // 使用一层
+		imageMemoryBarrier.srcAccessMask = 0;
+		imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.image = computeTargetImage;
+		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+		imageMemoryBarrier.subresourceRange.levelCount = 1;
+		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+		imageMemoryBarrier.subresourceRange.layerCount = 1;
 
-		// 执行图像内存屏障，转换图像布局
 		vkCmdPipelineBarrier(
-			commandBuffer, // 命令缓冲区
-			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, // 之前的管线阶段
-			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // 后续的计算着色器阶段
-			0, // 标志
-			0, nullptr, // 没有缓冲区内存依赖
-			0, nullptr, // 没有图像内存依赖
-			1, &imageMemoryBarrier // 只需要一个内存屏障
+			commandBuffer,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			0,
+			0, nullptr,
+			0, nullptr,
+			1, &imageMemoryBarrier
 		);
 
 		endSingleTimeCommands(commandBuffer);
@@ -856,7 +854,7 @@ private:
 		viewInfo.subresourceRange.layerCount = 1;
 		vkCreateImageView(device, &viewInfo, nullptr, &computeTargetImageView);
 
-		// 加载图像
+		// load background image
 		int texWidth, texHeight, texChannels;
 		stbi_uc* pixels = stbi_load("assets/background.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
 		VkDeviceSize imageSize = texWidth * texHeight * 4;
@@ -866,7 +864,6 @@ private:
 			throw std::runtime_error("Failed to load texture image!");
 		}
 
-		// 创建 staging buffer
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingBufferMemory;
 		createBuffer(imageSize,
@@ -874,14 +871,13 @@ private:
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			stagingBuffer, stagingBufferMemory);
 
-		// 拷贝像素到 staging buffer
 		void* data;
 		vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
 		memcpy(data, pixels, static_cast<size_t>(imageSize));
 		vkUnmapMemory(device, stagingBufferMemory);
 		stbi_image_free(pixels);
 
-		// 创建目标图像（注意 usage 包含 TRANSFER_DST_BIT）
+		// create background image
 		imageInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 		imageInfo.imageType = VK_IMAGE_TYPE_2D;
 		imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -896,7 +892,6 @@ private:
 
 		vkCreateImage(device, &imageInfo, nullptr, &backgroundImage);
 
-		// 分配并绑定图像内存
 		vkGetImageMemoryRequirements(device, backgroundImage, &memReq);
 		allocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
 		allocInfo.allocationSize = memReq.size;
@@ -904,7 +899,6 @@ private:
 		vkAllocateMemory(device, &allocInfo, nullptr, &backgroundImageMemory);
 		vkBindImageMemory(device, backgroundImage, backgroundImageMemory, 0);
 
-		// 转换布局 → 复制 → 转换布局
 		transitionImageLayout(backgroundImage, imageInfo.format,
 			VK_IMAGE_LAYOUT_UNDEFINED,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
@@ -936,7 +930,7 @@ private:
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-		// 创建 image view
+		// create background image view
 		viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
 		viewInfo.image = backgroundImage;
 		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
@@ -949,7 +943,6 @@ private:
 
 		vkCreateImageView(device, &viewInfo, nullptr, &backgroundImageView);
 
-		// 清理 staging buffer
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vkFreeMemory(device, stagingBufferMemory, nullptr);
 	}
@@ -1743,35 +1736,30 @@ private:
 			throw std::runtime_error("failed to begin recording command buffer!");
 		}
 
-		//VkCommandBuffer commandBuffer = beginSingleTimeCommands();
 		VkImageMemoryBarrier imageMemoryBarrier = {};
 		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT; // 没有源访问
-		imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // 着色器读取和写入
-		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL; // 旧的布局
-		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // 新的布局
-		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // 默认
-		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // 默认
-		imageMemoryBarrier.image = computeTargetImage; // 目标图像
-		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // 颜色通道
-		imageMemoryBarrier.subresourceRange.baseMipLevel = 0; // 从mipmap等级0开始
-		imageMemoryBarrier.subresourceRange.levelCount = 1; // 使用一级mipmap
-		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0; // 从第0层开始
-		imageMemoryBarrier.subresourceRange.layerCount = 1; // 使用一层
+		imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+		imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.image = computeTargetImage;
+		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+		imageMemoryBarrier.subresourceRange.levelCount = 1;
+		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+		imageMemoryBarrier.subresourceRange.layerCount = 1;
 
-		// 执行图像内存屏障，转换图像布局
 		vkCmdPipelineBarrier(
-			commandBuffer, // 命令缓冲区
-			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // 之前的管线阶段
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, // 后续的计算着色器阶段
-			0, // 标志
-			0, nullptr, // 没有缓冲区内存依赖
-			0, nullptr, // 没有图像内存依赖
-			1, &imageMemoryBarrier // 只需要一个内存屏障
+			commandBuffer,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			0,
+			0, nullptr,
+			0, nullptr,
+			1, &imageMemoryBarrier
 		);
-
-		//endSingleTimeCommands(commandBuffer);
-
 
 		VkRenderPassBeginInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1818,26 +1806,25 @@ private:
 		imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		imageMemoryBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 		imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
-		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // 旧的布局
-		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL; // 新的布局
-		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // 默认
-		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED; // 默认
-		imageMemoryBarrier.image = computeTargetImage; // 目标图像
-		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // 颜色通道
-		imageMemoryBarrier.subresourceRange.baseMipLevel = 0; // 从mipmap等级0开始
-		imageMemoryBarrier.subresourceRange.levelCount = 1; // 使用一级mipmap
-		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0; // 从第0层开始
-		imageMemoryBarrier.subresourceRange.layerCount = 1; // 使用一层
+		imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		imageMemoryBarrier.image = computeTargetImage;
+		imageMemoryBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageMemoryBarrier.subresourceRange.baseMipLevel = 0;
+		imageMemoryBarrier.subresourceRange.levelCount = 1;
+		imageMemoryBarrier.subresourceRange.baseArrayLayer = 0;
+		imageMemoryBarrier.subresourceRange.layerCount = 1;
 
-		// 执行图像内存屏障，转换图像布局
 		vkCmdPipelineBarrier(
-			commandBuffer, // 命令缓冲区
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, // 之前的管线阶段
-			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // 后续的计算着色器阶段
-			0, // 标志
-			0, nullptr, // 没有缓冲区内存依赖
-			0, nullptr, // 没有图像内存依赖
-			1, &imageMemoryBarrier // 只需要一个内存屏障
+			commandBuffer,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			0,
+			0, nullptr,
+			0, nullptr,
+			1, &imageMemoryBarrier
 		);
 
 		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -1860,12 +1847,9 @@ private:
 
 		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
 
-		//vkCmdDispatch(commandBuffer, WIDTH * HEIGHT / GROUP, 1, 1);
-		// 计算工作组数量 (例如宽高分别除以本地尺寸)
 		uint32_t groupCountX = (WIDTH + LOCAL_SIZE_X - 1) / LOCAL_SIZE_X;
 		uint32_t groupCountY = (HEIGHT + LOCAL_SIZE_Y - 1) / LOCAL_SIZE_Y;
 		vkCmdDispatch(commandBuffer, groupCountX, groupCountY, 1);
-		//vkCmdDispatch(commandBuffer, 256, 1, 1);
 
 		if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
 		{

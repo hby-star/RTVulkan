@@ -553,9 +553,6 @@
     </CustomBuild>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="log.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="lib\stb_image.h" />
     <ClInclude Include="lib\tiny_obj_loader.h" />
   </ItemGroup>

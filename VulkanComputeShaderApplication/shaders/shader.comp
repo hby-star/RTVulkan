@@ -44,14 +44,10 @@ layout(std140, binding = 1) readonly buffer RaySSBOIn {
      Ray rayOut[];
  };
 
-//  添加输出图像
 layout (binding = 3, rgba8) uniform image2D outputImage;
 
-
-//  添加背景图像
 layout(binding = 4) uniform sampler2D backgroundImage;
 
-//  添加三角形数据
 layout(std140, binding = 5) readonly buffer TriangleSSBO {
     Triangle triangles[];
 };
@@ -247,7 +243,6 @@ vec3 cast_ray(vec3 orig, vec3 dir) {
         scene_intersect(segment.origin, segment.direction, hit);
 
         if (!hit.hit) {
-            // 方向转成球面坐标采样背景图（更接近 CPU 的方式）
             vec3 d = normalize(segment.direction);
             float longitude = atan(d.z, d.x);
             float latitude = asin(d.y);
@@ -282,7 +277,6 @@ vec3 cast_ray(vec3 orig, vec3 dir) {
 
         color += segment.throughput * (diffuse * hit.material.albedo.x + specular * hit.material.albedo.y);
 
-        // 反射分支
         if (hit.material.albedo.z > 0.0 && stackSize < MAX_STACK_SIZE) {
             vec3 next_dir = normalize(reflect(segment.direction, n));
             vec3 offset = dot(next_dir, n) < 0.0 ? -n * MIN_EPSILON : n * MIN_EPSILON;
@@ -291,7 +285,6 @@ vec3 cast_ray(vec3 orig, vec3 dir) {
             stack[stackSize++] = PathSegment(next_origin, next_dir, next_throughput, segment.depth + 1);
         }
 
-        // 折射分支
         if (hit.material.albedo.w > 0.0 && stackSize < MAX_STACK_SIZE) {
             vec3 refract_dir = custom_refract(segment.direction, n, hit.material.refractive.x, 1.0);
             if (length(refract_dir) > 0.0001) {
@@ -315,7 +308,6 @@ void main() {
 
     uint idx = uv.y * WIDTH + uv.x;
 
-    // 获取输入 Ray
     Ray ray = rayIn[idx];
     vec3 ray_dir = normalize(ray.dir.xyz);
     vec3 ray_orig = vec3(0.0, 0.0, 0.0);
@@ -324,7 +316,6 @@ void main() {
     
     color = pow(color, vec3(GAMMA));
     
-    // 写入 image2D 和 SSBO
     imageStore(outputImage, uv, vec4(color, 1.0));
     rayOut[idx].resultColor = vec4(color, 1.0);
 }
