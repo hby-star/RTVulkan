@@ -570,6 +570,7 @@ private:
 			{
 				VkPhysicalDeviceProperties properties;
 				vkGetPhysicalDeviceProperties(device, &properties);
+				std::cout << "Found GPU: " << properties.deviceName << std::endl;
 				int score = 0;
 
 				if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
@@ -2283,6 +2284,9 @@ private:
 
 int main()
 {
+	std::cout << "Tiny Ray Tracer through Vulkan Compute Shader." << std::endl;
+	std::cout << "Press WASD to move camera." << std::endl;
+
 	ComputeShaderApplication app;
 
 	try
