@@ -424,9 +424,6 @@ private:
 		{
 			vkDestroyBuffer(device, shaderStorageRayBuffers[i], nullptr);
 			vkFreeMemory(device, shaderStorageRayBuffersMemory[i], nullptr);
-
-			vkDestroyBuffer(device, shaderStorageTriangleBuffers[i], nullptr);
-			vkFreeMemory(device, shaderStorageTriangleBuffersMemory[i], nullptr);
 		}
 
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -878,74 +875,13 @@ private:
 		vkUnmapMemory(device, stagingBufferMemory);
 		stbi_image_free(pixels);
 
+		// TODO
 		// create background image
-		imageInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
-		imageInfo.imageType = VK_IMAGE_TYPE_2D;
-		imageInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
-		imageInfo.extent = { (uint32_t)texWidth, (uint32_t)texHeight, 1 };
-		imageInfo.mipLevels = 1;
-		imageInfo.arrayLayers = 1;
-		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-		imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		// hint: VK_FORMAT_R8G8B8A8_UNORM
+		// hint: transition image layout to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 
-		vkCreateImage(device, &imageInfo, nullptr, &backgroundImage);
-
-		vkGetImageMemoryRequirements(device, backgroundImage, &memReq);
-		allocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
-		allocInfo.allocationSize = memReq.size;
-		allocInfo.memoryTypeIndex = findMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		vkAllocateMemory(device, &allocInfo, nullptr, &backgroundImageMemory);
-		vkBindImageMemory(device, backgroundImage, backgroundImageMemory, 0);
-
-		transitionImageLayout(backgroundImage, imageInfo.format,
-			VK_IMAGE_LAYOUT_UNDEFINED,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-		VkCommandBuffer cmd = beginSingleTimeCommands();
-
-		VkBufferImageCopy region = {};
-		region.bufferOffset = 0;
-		region.bufferRowLength = 0;
-		region.bufferImageHeight = 0;
-		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		region.imageSubresource.mipLevel = 0;
-		region.imageSubresource.baseArrayLayer = 0;
-		region.imageSubresource.layerCount = 1;
-		region.imageOffset = { 0, 0, 0 };
-		region.imageExtent = {
-			static_cast<uint32_t>(texWidth),
-			static_cast<uint32_t>(texHeight),
-			1
-		};
-
-		vkCmdCopyBufferToImage(cmd, stagingBuffer, backgroundImage,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			1, &region);
-
-		endSingleTimeCommands(cmd);
-
-		transitionImageLayout(backgroundImage, imageInfo.format,
-			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
+		// TODO
 		// create background image view
-		viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-		viewInfo.image = backgroundImage;
-		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = imageInfo.format;
-		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		viewInfo.subresourceRange.baseMipLevel = 0;
-		viewInfo.subresourceRange.levelCount = 1;
-		viewInfo.subresourceRange.baseArrayLayer = 0;
-		viewInfo.subresourceRange.layerCount = 1;
-
-		vkCreateImageView(device, &viewInfo, nullptr, &backgroundImageView);
-
-		vkDestroyBuffer(device, stagingBuffer, nullptr);
-		vkFreeMemory(device, stagingBufferMemory, nullptr);
 	}
 
 	void createTextureSampler()
@@ -962,29 +898,10 @@ private:
 			throw std::runtime_error("failed to create texture sampler!");
 		}
 
-		// background image sampler
-		VkSamplerCreateInfo backgroundSamplerInfo = {};
-		backgroundSamplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-		backgroundSamplerInfo.magFilter = VK_FILTER_LINEAR;
-		backgroundSamplerInfo.minFilter = VK_FILTER_LINEAR;
-		backgroundSamplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		backgroundSamplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		backgroundSamplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-		backgroundSamplerInfo.anisotropyEnable = VK_TRUE;
-		backgroundSamplerInfo.maxAnisotropy = 16;
-		backgroundSamplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-		backgroundSamplerInfo.unnormalizedCoordinates = VK_FALSE;
-		backgroundSamplerInfo.compareEnable = VK_FALSE;
-		backgroundSamplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-		backgroundSamplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-		backgroundSamplerInfo.mipLodBias = 0.0f;
-		backgroundSamplerInfo.minLod = 0.0f;
-		backgroundSamplerInfo.maxLod = 0.0f;
-		if (vkCreateSampler(device, &backgroundSamplerInfo, nullptr, &backgroundImageSampler) != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to create texture sampler!");
-		}
-
+		// TODO
+		// create background image sampler
+		// hint: VK_FILTER_LINEAR
+		// hint: VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE
 	}
 
 	void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
@@ -1344,8 +1261,6 @@ private:
 		for (auto& ray : rays)
 		{
 			float dir_x = (pix++ % WIDTH + 0.5) - WIDTH / 2.0;
-
-			// this flips the image at the same time
 			float dir_y = -(pix / WIDTH + 0.5) + HEIGHT / 2.0;
 			float dir_z = -1.0 * (HEIGHT / (2.0 * tan(fov / 2.0)));
 			ray.dir = glm::vec4(glm::normalize(glm::vec3(dir_x, dir_y, dir_z)), 1.0);
@@ -1353,8 +1268,6 @@ private:
 		}
 
 		VkDeviceSize rayBufferSize = sizeof(Ray) * WIDTH * HEIGHT;
-
-		// Create a staging buffer used to upload data to the gpu
 		VkBuffer rayStagingBuffer;
 		VkDeviceMemory rayStagingBufferMemory;
 		createBuffer(rayBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, rayStagingBuffer, rayStagingBufferMemory);
@@ -1367,7 +1280,6 @@ private:
 		shaderStorageRayBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 		shaderStorageRayBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
 
-		// Copy initial particle data to all storage buffers
 		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
 			createBuffer(rayBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageRayBuffers[i], shaderStorageRayBuffersMemory[i]);
@@ -1385,22 +1297,10 @@ private:
 			bboxMax = glm::max(bboxMax, glm::max(tri.v0, glm::max(tri.v1, tri.v2)));
 		}
 		TRIANGLE_COUNT = triangles.size();
-		VkDeviceSize triannglesBufferSize = triangles.size() * sizeof(Triangle);
-		VkBuffer triangleStagingBuffer;
-		VkDeviceMemory triangleStagingBufferMemory;
-		createBuffer(triannglesBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, triangleStagingBuffer, triangleStagingBufferMemory);
-		vkMapMemory(device, triangleStagingBufferMemory, 0, triannglesBufferSize, 0, &data);
-		memcpy(data, triangles.data(), (size_t)triannglesBufferSize);
-		vkUnmapMemory(device, triangleStagingBufferMemory);
-		shaderStorageTriangleBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-		shaderStorageTriangleBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-		for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-		{
-			createBuffer(triannglesBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageTriangleBuffers[i], shaderStorageTriangleBuffersMemory[i]);
-			copyBuffer(triangleStagingBuffer, shaderStorageTriangleBuffers[i], triannglesBufferSize);
-		}
-		vkDestroyBuffer(device, triangleStagingBuffer, nullptr);
-		vkFreeMemory(device, triangleStagingBufferMemory, nullptr);
+
+		// TODO
+		// create triangle buffer, 
+		// hint: Ref to Ray buffer implemention above
 	}
 
 	void createUniformBuffers()
@@ -1506,7 +1406,7 @@ private:
 			uniformBufferInfo.offset = 0;
 			uniformBufferInfo.range = sizeof(UniformBufferObject);
 
-			std::array<VkWriteDescriptorSet, 6> descriptorWrites{};
+			std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
 			descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			descriptorWrites[0].dstSet = computeDescriptorSets[i];
 			descriptorWrites[0].dstBinding = 0;
@@ -1553,31 +1453,18 @@ private:
 			descriptorWrites[3].descriptorCount = 1;
 			descriptorWrites[3].pImageInfo = &imageDescriptor;
 
-			VkDescriptorImageInfo backgroundImageInfo{};
-			backgroundImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			backgroundImageInfo.imageView = backgroundImageView;
-			backgroundImageInfo.sampler = backgroundImageSampler;
-			descriptorWrites[4].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[4].dstSet = computeDescriptorSets[i];
-			descriptorWrites[4].dstBinding = 4;
-			descriptorWrites[4].dstArrayElement = 0;
-			descriptorWrites[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			descriptorWrites[4].descriptorCount = 1;
-			descriptorWrites[4].pImageInfo = &backgroundImageInfo;
 
-			VkDescriptorBufferInfo triangleBufferInfo{};
-			triangleBufferInfo.buffer = shaderStorageTriangleBuffers[i];
-			triangleBufferInfo.offset = 0;
-			triangleBufferInfo.range = sizeof(Triangle) * TRIANGLE_COUNT;
-			descriptorWrites[5].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-			descriptorWrites[5].dstSet = computeDescriptorSets[i];
-			descriptorWrites[5].dstBinding = 5;
-			descriptorWrites[5].dstArrayElement = 0;
-			descriptorWrites[5].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-			descriptorWrites[5].descriptorCount = 1;
-			descriptorWrites[5].pBufferInfo = &triangleBufferInfo;
+			// TODO 
+			// update background image
+			// hint: VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
+			// hint: see createComputeDescriptorSetLayout function for reference
 
-			vkUpdateDescriptorSets(device, 6, descriptorWrites.data(), 0, nullptr);
+			// TODO 
+			// update triangle buffer
+			// hint: VK_DESCRIPTOR_TYPE_STORAGE_BUFFER
+			// hint: see createComputeDescriptorSetLayout function for reference
+
+			vkUpdateDescriptorSets(device, 4, descriptorWrites.data(), 0, nullptr);
 		}
 	}
 

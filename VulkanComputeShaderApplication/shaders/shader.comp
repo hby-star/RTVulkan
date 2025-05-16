@@ -1,13 +1,13 @@
 #version 450
 
 struct Material {
-    vec4 albedo;           // [漫反射权重, 镜面反射权重, 反射权重, 折射权重]
-    vec4 diffuse_specular; // rgb:漫反射颜色, a:镜面反射指数 
-    vec4 refractive;       // x:折射率, yzw:保留 
+    vec4 albedo;          
+    vec4 diffuse_specular;
+    vec4 refractive;  
 };
 
 struct Sphere {
-    vec4 center_radius;    // xyz:中心, w:半径 
+    vec4 center_radius;    // xyz:center, w:radius
     Material material;
 };
 
@@ -61,15 +61,13 @@ const float MIN_EPSILON = 0.001;
 const int WIDTH = 1024;
 const int HEIGHT = 768;
 const float GAMMA = 2.2;
+const float PI = 3.14159265358979323846;
 
 bool ray_aabb_intersect(vec3 orig, vec3 dir, vec3 invDir, vec3 bboxMin, vec3 bboxMax) {
-    vec3 tmin = (bboxMin - orig) * invDir;
-    vec3 tmax = (bboxMax - orig) * invDir;
-    vec3 t1 = min(tmin, tmax);
-    vec3 t2 = max(tmin, tmax);
-    float tNear = max(max(t1.x, t1.y), t1.z);
-    float tFar = min(min(t2.x, t2.y), t2.z);
-    return tFar >= max(tNear, 0.0);
+    // TODO
+    // implement the bbox intersect for optimization
+
+    return false;
 }
 
 vec3 custom_refract(vec3 I, vec3 N, float eta_out, float eta_in) {
@@ -87,34 +85,9 @@ vec3 custom_refract(vec3 I, vec3 N, float eta_out, float eta_in) {
 }
 
 bool ray_triangle_intersect(vec3 orig, vec3 dir, Triangle tri, out float t, out vec3 normal) {
-    vec3 v0 = tri.v0.xyz;
-    vec3 v1 = tri.v1.xyz;
-    vec3 v2 = tri.v2.xyz;
-    
-    vec3 edge1 = v1 - v0;
-    vec3 edge2 = v2 - v0;
-    vec3 h = cross(dir, edge2);
-    float a = dot(edge1, h);
-    if (abs(a) < 1e-5) return false;
-    
-    float f = 1.0 / a;
-    vec3 s = orig - v0;
-    float u = f * dot(s, h);
-    if (u < 0.0 || u > 1.0) return false;
-    
-    vec3 q = cross(s, edge1);
-    float v = f * dot(dir, q);
-    if (v < 0.0 || u + v > 1.0) return false;
-    
-    float tTemp = f * dot(edge2, q);
-    if (tTemp > MIN_EPSILON) {
-        t = tTemp;
-        normal = normalize(cross(edge1, edge2));
-        if (dot(dir, normal) > 0.0) {
-            normal = -normal;
-        }
-        return true;
-    }
+    // TODO
+    // implement the triangle intersect
+
     return false;
 }
 
@@ -143,6 +116,9 @@ struct SceneHit {
 };
 
 void scene_intersect(vec3 orig, vec3 dir, out SceneHit nearest) {
+    // TODO 
+    // You need to modify this function to add a duck model(a lot of triangles)
+
     nearest.hit = false;
     nearest.distance = 1e10;
 
@@ -175,27 +151,12 @@ void scene_intersect(vec3 orig, vec3 dir, out SceneHit nearest) {
             nearest.material = spheres[i].material;
         }
     }
-
-
-    vec3 invDir = 1.0 / dir;
-    if (!ray_aabb_intersect(orig, dir, invDir, ubo.bboxMin.xyz, ubo.bboxMax.xyz)) {
-        return;
-    }
-    for (int i = 0; i < triangles.length(); i++) {
-        float t = 1e10;
-        vec3 triNormal;
-        if (ray_triangle_intersect(orig, dir, triangles[i], t, triNormal) && t < nearest.distance) {
-            vec3 p = orig + dir * t;
-            nearest.hit = true;
-            nearest.distance = t;
-            nearest.point = p;
-            nearest.normal = triNormal;
-            nearest.material = triangles[i].material;
-        }
-    }
 }
 
 bool shadow_intersect(vec3 orig, vec3 dir, float max_dist) {
+    // TODO 
+    // You need to modify this function to add a duck model(a lot of triangles)
+
     Sphere spheres[4] = {ubo.sphere0, ubo.sphere1, ubo.sphere2, ubo.sphere3};
     for (int i = 0; i < 4; i++) {
         float t = 1e10;
@@ -203,20 +164,6 @@ bool shadow_intersect(vec3 orig, vec3 dir, float max_dist) {
             return true;
         }
     }
-
-    vec3 invDir = 1.0 / dir;
-    if (!ray_aabb_intersect(orig, dir, invDir, ubo.bboxMin.xyz, ubo.bboxMax.xyz)) {
-        return false;
-    }
-    for (int i = 0; i < triangles.length(); i++) {
-        float t = 1e10;
-        vec3 tempN;
-        if (ray_triangle_intersect(orig, dir, triangles[i], t, tempN) && t < max_dist) {
-            return true;
-        }
-    }
-
-
     return false;
 }
 
@@ -227,9 +174,11 @@ struct PathSegment {
     int depth;
 };
 
-const float PI = 3.14159265358979323846;
 
 vec3 cast_ray(vec3 orig, vec3 dir) {
+    // TODO
+    // You need to modify this function to add background
+
     vec3 color = vec3(0.0);
     PathSegment stack[MAX_STACK_SIZE];
     int stackSize = 0;
@@ -241,16 +190,8 @@ vec3 cast_ray(vec3 orig, vec3 dir) {
 
         SceneHit hit;
         scene_intersect(segment.origin, segment.direction, hit);
-
         if (!hit.hit) {
-            vec3 d = normalize(segment.direction);
-            float longitude = atan(d.z, d.x);
-            float latitude = asin(d.y);
-            float u = (longitude + PI) / (2.0 * PI);
-            float v = 1.0 - (latitude + PI / 2.0) / PI;
-            vec3 bgColor = texture(backgroundImage, vec2(u, v)).rgb;
-
-            color += segment.throughput * bgColor;
+            color += segment.throughput * BACKGROUND_COLOR;
             continue;
         }
 
@@ -299,7 +240,6 @@ vec3 cast_ray(vec3 orig, vec3 dir) {
 
     return clamp(color, vec3(0.0), vec3(1.0));
 }
-
 
 
 void main() {
