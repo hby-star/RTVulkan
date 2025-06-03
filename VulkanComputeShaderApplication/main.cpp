@@ -26,8 +26,14 @@
 #include <set>
 #include <random>
 #include <cmath>
+#include <unordered_map>
 
 #include "lib/SceneInfo.h"
+
+SceneConfig sceneConfig;
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 0.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
 const bool preferHighPerformanceGPU = true;
 
@@ -118,11 +124,7 @@ struct Triangle
 	glm::vec4 v0;
 	glm::vec4 v1;
 	glm::vec4 v2;
-	Material material;
 };
-
-glm::vec4 bboxMin(FLT_MAX);
-glm::vec4 bboxMax(-FLT_MAX);
 
 constexpr Material      ivory = { {0.9,  0.5, 0.1, 0.0}, {0.4, 0.4, 0.3, 50.0},  {1.0, 0.0, 0.0, 0.0} };
 constexpr Material      glass = { {0.0,  0.9, 0.1, 0.8}, {0.6, 0.7, 0.8, 125.0},  {1.5, 0.0, 0.0, 0.0} };
@@ -146,14 +148,25 @@ constexpr glm::vec3 lights[] = {
 	{ 30, 20,  30}
 };
 
+struct ModelInfo
+{
+	glm::vec4 start_end_index_display; // x = start index, y = end index, z = display
+	glm::vec4 bboxMin;
+	glm::vec4 bboxMax;
+	Material material;
+};
+
+const int modelsNum = 6;
+
+ModelInfo models[6];
 
 struct UniformBufferObject
 {
 	Sphere spheresUbo[4];
+	glm::vec4 spheresDisplay;
 	glm::vec4 lightsUbo[3];
 	glm::vec4 camPos;
-	glm::vec4 bboxMin;
-	glm::vec4 bboxMax;
+	ModelInfo modelsInfo[6];
 };
 
 struct Ray
@@ -188,7 +201,6 @@ struct Ray
 
 std::vector<Ray> rays(WIDTH* HEIGHT + 1);
 
-SceneConfig sceneConfig;
 
 class ComputeShaderApplication
 {
@@ -276,9 +288,29 @@ private:
 	int frameCount;
 	int lastFrameCount = 1;
 
-	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 0.0f);
-	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+	void updateUniformBuffer(uint32_t currentImage)
+	{
+		UniformBufferObject ubo{};
+		for (int i = 0; i < spheresNum; i++)
+		{
+			ubo.spheresUbo[i] = spheres[i];
+			ubo.spheresDisplay[i] = sceneConfig.spheresDisplay[i];
+		}
+
+		for (int i = 0; i < lightsNum; i++)
+		{
+			ubo.lightsUbo[i] = glm::vec4(lights[i], 1.0f);
+		}
+
+		ubo.camPos = glm::vec4(cameraPos, 1.0f);
+
+		for (int i = 0; i < modelsNum; i++)
+		{
+			ubo.modelsInfo[i] = models[i];
+		}
+
+		memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+	}
 
 	void initWindow()
 	{
@@ -1340,6 +1372,66 @@ private:
 		}
 	}
 
+	void loadAndComputeModelInfo(std::vector<Triangle>& triangles)
+	{
+		int current_index = 0;
+		for (size_t i = 0; i < sceneConfig.models.size(); ++i)
+		{
+			const auto& modelConfig = sceneConfig.models[i];
+			if (!modelConfig.display) continue;
+
+			// 加载模型
+			std::vector<Triangle> currentTriangles = loadObjAsTriangles(modelConfig.filename);
+
+			// 构建变换矩阵
+			glm::mat4 modelMatrix = glm::mat4(1.0f);
+			modelMatrix = glm::translate(modelMatrix, modelConfig.translation);
+			modelMatrix = glm::rotate(modelMatrix, glm::radians(modelConfig.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+			modelMatrix = glm::rotate(modelMatrix, glm::radians(modelConfig.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+			modelMatrix = glm::rotate(modelMatrix, glm::radians(modelConfig.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+			modelMatrix = glm::scale(modelMatrix, modelConfig.scale);
+
+			modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, -10.0f));
+
+			// 初始化包围盒
+			glm::vec4 bboxMin(FLT_MAX);
+			glm::vec4 bboxMax(-FLT_MAX);
+
+			// 变换每个三角形顶点
+			for (auto& triangle : currentTriangles)
+			{
+				triangle.v0 = modelMatrix * triangle.v0;
+				triangle.v1 = modelMatrix * triangle.v1;
+				triangle.v2 = modelMatrix * triangle.v2;
+				/*triangle.v0 = glm::vec4(modelConfig.translation, 0.0f) + triangle.v0;
+				triangle.v1 = glm::vec4(modelConfig.translation, 0.0f) + triangle.v1;
+				triangle.v2 = glm::vec4(modelConfig.translation, 0.0f) + triangle.v2;*/
+				triangles.push_back(triangle);
+
+				bboxMin = glm::min(bboxMin, glm::min(glm::min(triangle.v0, triangle.v1), triangle.v2));
+				bboxMax = glm::max(bboxMax, glm::max(glm::max(triangle.v0, triangle.v1), triangle.v2));
+			}
+
+			// 写入模型信息
+			models[i].bboxMin = bboxMin;
+			models[i].bboxMax = bboxMax;
+			models[i].material = {
+				glm::vec4{ modelConfig.albedo },
+				glm::vec4{ modelConfig.diffuse, modelConfig.shiness },
+				glm::vec4{ modelConfig.refractiveIndex, 0.0f, 0.0f, 0.0f }
+			};
+			models[i].start_end_index_display = {
+				static_cast<uint32_t>(current_index),
+				static_cast<uint32_t>(current_index + currentTriangles.size() - 1),
+				modelConfig.display,
+				0
+			};
+
+			current_index += static_cast<int>(currentTriangles.size());
+		}
+	}
+
+
 	void createShaderStorageBuffers()
 	{
 		// Ray buffer
@@ -1382,12 +1474,10 @@ private:
 		vkFreeMemory(device, rayStagingBufferMemory, nullptr);
 
 		// Triangle buffer
-		std::vector<Triangle> triangles = loadObjAsTriangles("assets/duck.obj", glass);
-		for (const Triangle& tri : triangles)
-		{
-			bboxMin = glm::min(bboxMin, glm::min(tri.v0, glm::min(tri.v1, tri.v2)));
-			bboxMax = glm::max(bboxMax, glm::max(tri.v0, glm::max(tri.v1, tri.v2)));
-		}
+		std::vector<Triangle> triangles;
+
+		loadAndComputeModelInfo(triangles);
+
 		TRIANGLE_COUNT = triangles.size();
 		VkDeviceSize triannglesBufferSize = triangles.size() * sizeof(Triangle);
 		VkBuffer triangleStagingBuffer;
@@ -1894,26 +1984,6 @@ private:
 		}
 	}
 
-
-	void updateUniformBuffer(uint32_t currentImage)
-	{
-		UniformBufferObject ubo{};
-		for (int i = 0; i < 4; i++)
-		{
-			ubo.spheresUbo[i] = spheres[i];
-		}
-		for (int i = 0; i < 3; i++)
-		{
-			ubo.lightsUbo[i] = glm::vec4(lights[i], 1.0f);
-		}
-
-		ubo.camPos = glm::vec4(cameraPos, 1.0f);
-		ubo.bboxMin = bboxMin;
-		ubo.bboxMax = bboxMax;
-
-		memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-	}
-
 	void drawFrame()
 	{
 		VkSubmitInfo submitInfo{};
@@ -2023,7 +2093,7 @@ private:
 		return shaderModule;
 	}
 
-	std::vector<Triangle> loadObjAsTriangles(const std::string& filename, const Material& mat)
+	std::vector<Triangle> loadObjAsTriangles(const std::string& filename)
 	{
 		tinyobj::attrib_t attrib;
 		std::vector<tinyobj::shape_t> shapes;
@@ -2057,7 +2127,6 @@ private:
 				tri.v0 = glm::vec4(v[0], 0.0f);
 				tri.v1 = glm::vec4(v[1], 0.0f);
 				tri.v2 = glm::vec4(v[2], 0.0f);
-				tri.material = mat;
 				triangles.push_back(tri);
 
 				index_offset += fv;

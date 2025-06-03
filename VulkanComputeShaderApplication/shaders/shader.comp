@@ -20,15 +20,22 @@ struct Triangle {
     vec4 v0;  // xyz: vertex 0
     vec4 v1;  // xyz: vertex 1
     vec4 v2;  // xyz: vertex 2
-    Material material;
+};
+
+struct ModelsInfo
+{
+	vec4 start_end_index_display;
+	vec4 bboxMin;
+	vec4 bboxMax;
+	Material material;
 };
 
 layout (binding = 0) uniform ParameterUBO {
     Sphere spheres[4];
+    vec4 sphereDisplay;
     vec4 lights[3];
     vec4 camPos;
-    vec4 bboxMin;
-    vec4 bboxMax;
+    ModelsInfo modelsInfo[6];
 } ubo;
 
 layout(std140, binding = 1) readonly buffer RaySSBOIn {
@@ -157,7 +164,7 @@ void scene_intersect(vec3 orig, vec3 dir, out SceneHit nearest) {
 
     for (int i = 0; i < 4; i++) {
         float t = 1e10;
-        if (ray_sphere_intersect(orig, dir, ubo.spheres[i], t) && t < nearest.distance) {
+        if (ubo.sphereDisplay[i] != 0.0f && ray_sphere_intersect(orig, dir, ubo.spheres[i], t) && t < nearest.distance) {
             vec3 p = orig + dir * t;
             nearest.hit = true;
             nearest.distance = t;
@@ -167,22 +174,23 @@ void scene_intersect(vec3 orig, vec3 dir, out SceneHit nearest) {
         }
     }
 
-
-    vec3 invDir = 1.0 / dir;
-    if (!ray_aabb_intersect(orig, dir, invDir, ubo.bboxMin.xyz, ubo.bboxMax.xyz)) {
-        return;
-    }
-    for (int i = 0; i < triangles.length(); i++) {
-        float t = 1e10;
-        vec3 triNormal;
-        if (ray_triangle_intersect(orig, dir, triangles[i], t, triNormal) && t < nearest.distance) {
-            vec3 p = orig + dir * t;
-            nearest.hit = true;
-            nearest.distance = t;
-            nearest.point = p;
-            nearest.normal = dot(dir, triNormal) < 0.0 ? triNormal : -triNormal;
-            //nearest.normal = triNormal;
-            nearest.material = triangles[i].material;
+    for (int j = 0; j < 6; j++) {
+        vec3 invDir = 1.0 / dir;
+        if (ubo.modelsInfo[j].start_end_index_display.z == 0.0f ||!ray_aabb_intersect(orig, dir, invDir, ubo.modelsInfo[j].bboxMin.xyz, ubo.modelsInfo[j].bboxMax.xyz)) {
+            continue;
+        }
+        for (int i = int(ubo.modelsInfo[j].start_end_index_display.x); i < int(ubo.modelsInfo[j].start_end_index_display.y); i++) {
+            float t = 1e10;
+            vec3 triNormal;
+            if (ray_triangle_intersect(orig, dir, triangles[i], t, triNormal) && t < nearest.distance) {
+                vec3 p = orig + dir * t;
+                nearest.hit = true;
+                nearest.distance = t;
+                nearest.point = p;
+                nearest.normal = dot(dir, triNormal) < 0.0 ? triNormal : -triNormal;
+                //nearest.normal = triNormal;
+                nearest.material = ubo.modelsInfo[j].material;
+            }
         }
     }
 }
@@ -190,20 +198,22 @@ void scene_intersect(vec3 orig, vec3 dir, out SceneHit nearest) {
 bool shadow_intersect(vec3 orig, vec3 dir, float max_dist) {
     for (int i = 0; i < 4; i++) {
         float t = 1e10;
-        if (ray_sphere_intersect(orig, dir, ubo.spheres[i], t) && t < max_dist) {
+        if (ubo.sphereDisplay[i] != 0.0f && ray_sphere_intersect(orig, dir, ubo.spheres[i], t) && t < max_dist) {
             return true;
         }
     }
 
-    vec3 invDir = 1.0 / dir;
-    if (!ray_aabb_intersect(orig, dir, invDir, ubo.bboxMin.xyz, ubo.bboxMax.xyz)) {
-        return false;
-    }
-    for (int i = 0; i < triangles.length(); i++) {
-        float t = 1e10;
-        vec3 tempN;
-        if (ray_triangle_intersect(orig, dir, triangles[i], t, tempN) && t < max_dist) {
-            return true;
+    for (int j = 0; j < 6; j++) {
+        vec3 invDir = 1.0 / dir;
+        if (ubo.modelsInfo[j].start_end_index_display.z == 0.0f || !ray_aabb_intersect(orig, dir, invDir, ubo.modelsInfo[j].bboxMin.xyz, ubo.modelsInfo[j].bboxMax.xyz)) {
+            continue;
+        }
+        for (int i = int(ubo.modelsInfo[j].start_end_index_display.x); i < int(ubo.modelsInfo[j].start_end_index_display.y); i++) {
+            float t = 1e10;
+            vec3 tempN;
+            if (ray_triangle_intersect(orig, dir, triangles[i], t, tempN) && t < max_dist) {
+                return true;
+            }
         }
     }
 
