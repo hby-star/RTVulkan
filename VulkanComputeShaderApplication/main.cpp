@@ -27,6 +27,8 @@
 #include <random>
 #include <cmath>
 
+#include "lib/SceneInfo.h"
+
 const bool preferHighPerformanceGPU = true;
 
 using Clock = std::chrono::high_resolution_clock;
@@ -127,6 +129,8 @@ constexpr Material      glass = { {0.0,  0.9, 0.1, 0.8}, {0.6, 0.7, 0.8, 125.0},
 constexpr Material red_rubber = { {1.4,  0.3, 0.0, 0.0}, {0.3, 0.1, 0.1, 10.0},  {1.0, 0.0, 0.0, 0.0} };
 constexpr Material     mirror = { {0.0, 16.0, 0.8, 0.0}, {1.0, 1.0, 1.0, 1425.0}, {1.0, 0.0, 0.0, 0.0} };
 
+const int spheresNum = 4;
+
 constexpr Sphere spheres[] = {
 	{{-3,    0,   -16, 2},      ivory},
 	{{-1.0, -1.5, -12, 2},     glass},
@@ -134,21 +138,19 @@ constexpr Sphere spheres[] = {
 	{{ 7,    5,   -18, 4},     mirror}
 };
 
+const int lightsNum = 3;
+
 constexpr glm::vec3 lights[] = {
 	{-20, 20,  20},
 	{ 30, 50, -25},
 	{ 30, 20,  30}
 };
 
+
 struct UniformBufferObject
 {
-	Sphere sphere0;
-	Sphere sphere1;
-	Sphere sphere2;
-	Sphere sphere3;
-	glm::vec4 light0;
-	glm::vec4 light1;
-	glm::vec4 light2;
+	Sphere spheresUbo[4];
+	glm::vec4 lightsUbo[3];
 	glm::vec4 camPos;
 	glm::vec4 bboxMin;
 	glm::vec4 bboxMax;
@@ -186,12 +188,14 @@ struct Ray
 
 std::vector<Ray> rays(WIDTH* HEIGHT + 1);
 
+SceneConfig sceneConfig;
 
 class ComputeShaderApplication
 {
 public:
 	void run()
 	{
+		ReadSceneConfigFromXML("SceneConfig.xml", sceneConfig);
 		initWindow();
 		initVulkan();
 		mainLoop();
@@ -1894,13 +1898,15 @@ private:
 	void updateUniformBuffer(uint32_t currentImage)
 	{
 		UniformBufferObject ubo{};
-		ubo.sphere0 = spheres[0];
-		ubo.sphere1 = spheres[1];
-		ubo.sphere2 = spheres[2];
-		ubo.sphere3 = spheres[3];
-		ubo.light0 = glm::vec4(lights[0], 1.0f);
-		ubo.light1 = glm::vec4(lights[1], 1.0f);
-		ubo.light2 = glm::vec4(lights[2], 1.0f);
+		for (int i = 0; i < 4; i++)
+		{
+			ubo.spheresUbo[i] = spheres[i];
+		}
+		for (int i = 0; i < 3; i++)
+		{
+			ubo.lightsUbo[i] = glm::vec4(lights[i], 1.0f);
+		}
+
 		ubo.camPos = glm::vec4(cameraPos, 1.0f);
 		ubo.bboxMin = bboxMin;
 		ubo.bboxMax = bboxMax;

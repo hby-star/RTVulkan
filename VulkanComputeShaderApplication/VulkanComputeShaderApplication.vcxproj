@@ -513,6 +513,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="lib\tinyxml2.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -554,7 +555,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lib\stb_image.h" />
+    <ClInclude Include="lib\tinyxml2.h" />
     <ClInclude Include="lib\tiny_obj_loader.h" />
+    <ClInclude Include="lib\SceneInfo.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
