@@ -5,11 +5,11 @@
 * 使用`VS2022`打开`RTVulkan.sln`文件。
 * 检查并更改以下项目设置（和`Vulkan Turorial`中的环境配置步骤相同）
 
-<img src="C:\Users\Admin\Desktop\Learn\RayTracing\RTVulkan\image\image-20250515135005880.png" alt="image-20250515135005880" style="zoom: 50%;" />
+<img src="image/image-20250515135005880.png" alt="image-20250515135005880" style="zoom: 50%;" />
 
-<img src="C:\Users\Admin\Desktop\Learn\RayTracing\RTVulkan\image\image-20250515135022419.png" alt="image-20250515135022419" style="zoom:50%;" />
+<img src="image/image-20250515135022419.png" alt="image-20250515135022419" style="zoom:50%;" />
 
-<img src="C:\Users\Admin\Desktop\Learn\RayTracing\RTVulkan\image\image-20250515135039981.png" alt="image-20250515135039981" style="zoom:50%;" />
+<img src="image/image-20250515135039981.png" alt="image-20250515135039981" style="zoom:50%;" />
 
 * 在`VS2022`中运行项目。
 
