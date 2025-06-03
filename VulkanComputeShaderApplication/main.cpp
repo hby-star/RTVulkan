@@ -148,6 +148,12 @@ constexpr glm::vec3 lights[] = {
 	{ 30, 20,  30}
 };
 
+//constexpr glm::vec3 lights[] = {
+//	{-4, 4,  4},
+//	{ 3, 2, 2},
+//	{ -0.5, -1,  -0.5}
+//};
+
 struct ModelInfo
 {
 	glm::vec4 start_end_index_display; // x = start index, y = end index, z = display
@@ -1375,6 +1381,7 @@ private:
 	void loadAndComputeModelInfo(std::vector<Triangle>& triangles)
 	{
 		int current_index = 0;
+
 		for (size_t i = 0; i < sceneConfig.models.size(); ++i)
 		{
 			const auto& modelConfig = sceneConfig.models[i];
@@ -1383,15 +1390,27 @@ private:
 			// 加载模型
 			std::vector<Triangle> currentTriangles = loadObjAsTriangles(modelConfig.filename);
 
-			// 构建变换矩阵
-			glm::mat4 modelMatrix = glm::mat4(1.0f);
-			modelMatrix = glm::translate(modelMatrix, modelConfig.translation);
-			modelMatrix = glm::rotate(modelMatrix, glm::radians(modelConfig.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-			modelMatrix = glm::rotate(modelMatrix, glm::radians(modelConfig.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-			modelMatrix = glm::rotate(modelMatrix, glm::radians(modelConfig.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-			modelMatrix = glm::scale(modelMatrix, modelConfig.scale);
+			// 计算模型中心
+			glm::vec3 modelCenter = modelConfig.translation;
+			for (const auto& tri : currentTriangles)
+			{
+				modelCenter += glm::vec3(tri.v0) + glm::vec3(tri.v1) + glm::vec3(tri.v2);
+			}
+			modelCenter /= (3.0f * currentTriangles.size());
 
-			modelMatrix = glm::translate(modelMatrix, glm::vec3(0.0f, 0.0f, -10.0f));
+			// 构造变换矩阵（缩放关于模型中心，旋转关于世界轴）
+			glm::mat4 T_toOrigin = glm::translate(glm::mat4(1.0f), -modelCenter);
+			glm::mat4 T_back = glm::translate(glm::mat4(1.0f), modelCenter);
+			glm::mat4 S = glm::scale(glm::mat4(1.0f), modelConfig.scale);
+
+			glm::mat4 R = glm::mat4(1.0f);
+			R = glm::rotate(R, glm::radians(modelConfig.rotation.x), glm::vec3(1, 0, 0)); // world X
+			R = glm::rotate(R, glm::radians(modelConfig.rotation.y), glm::vec3(0, 1, 0)); // world Y
+			R = glm::rotate(R, glm::radians(modelConfig.rotation.z), glm::vec3(0, 0, 1)); // world Z
+
+			glm::mat4 T_translate = glm::translate(glm::mat4(1.0f), modelConfig.translation);
+
+			glm::mat4 modelMatrix = T_translate * R * T_back * S * T_toOrigin;
 
 			// 初始化包围盒
 			glm::vec4 bboxMin(FLT_MAX);
@@ -1403,9 +1422,6 @@ private:
 				triangle.v0 = modelMatrix * triangle.v0;
 				triangle.v1 = modelMatrix * triangle.v1;
 				triangle.v2 = modelMatrix * triangle.v2;
-				/*triangle.v0 = glm::vec4(modelConfig.translation, 0.0f) + triangle.v0;
-				triangle.v1 = glm::vec4(modelConfig.translation, 0.0f) + triangle.v1;
-				triangle.v2 = glm::vec4(modelConfig.translation, 0.0f) + triangle.v2;*/
 				triangles.push_back(triangle);
 
 				bboxMin = glm::min(bboxMin, glm::min(glm::min(triangle.v0, triangle.v1), triangle.v2));
@@ -2124,9 +2140,9 @@ private:
 				}
 
 				Triangle tri;
-				tri.v0 = glm::vec4(v[0], 0.0f);
-				tri.v1 = glm::vec4(v[1], 0.0f);
-				tri.v2 = glm::vec4(v[2], 0.0f);
+				tri.v0 = glm::vec4(v[0], 1.0f);
+				tri.v1 = glm::vec4(v[1], 1.0f);
+				tri.v2 = glm::vec4(v[2], 1.0f);
 				triangles.push_back(tri);
 
 				index_offset += fv;
